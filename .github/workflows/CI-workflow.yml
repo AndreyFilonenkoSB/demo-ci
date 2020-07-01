@@ -1,0 +1,70 @@
+name: Continuous Integration
+env:
+  PMD_URL: "https://github.com/pmd/pmd/releases/download/pmd_releases/6.23.0/pmd-bin-6.23.0.zip"
+  SFDX_CLI_URL: "https://developer.salesforce.com/media/salesforce-cli/sfdx-linux-amd64.tar.xz"
+  DECRYPTION_KEY: ${{ secrets.DECRYPTION_KEY }}
+  DECRYPTION_IV: ${{ secrets.DECRYPTION_IV }}
+  HUB_CONSUMER_KEY: ${{ secrets.HUB_CONSUMER_KEY }}
+  HUB_SFDC_USER: ${{ secrets.HUB_SFDC_USER }}
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: 'Install PMD'
+      run: |
+        curl -L $PMD_URL -o pmd-bin.zip
+        unzip pmd-bin.zip
+        rm pmd-bin.zip
+
+    - name: 'Run Static Analysis'
+      run: 'pmd-bin-6.23.0/bin/run.sh pmd -d . -R assets/pmd-ruleset.xml -f text -l apex -r static-analysis.txt -cache nonexistingfile.cache'
+
+    - uses: actions/upload-artifact@v2
+      if: failure()
+      with:
+        name: static-analysis-results
+        path: static-analysis.txt
+
+  build:
+    runs-on: ubuntu-latest
+    needs: static-analysis
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: 'Install Salesforce CLI'
+      run: |
+        mkdir sfdx-cli
+        wget -qO- $SFDX_CLI_URL | tar xJ -C sfdx-cli --strip-components 1
+        ./sfdx-cli/install
+
+    - name: 'Create hub key'
+      run: 'openssl enc -nosalt -aes-256-cbc -d -in assets/server.key.enc -out assets/server.key -base64 -K $DECRYPTION_KEY -iv $DECRYPTION_IV'
+    
+    - name: 'Create Scratch Org'
+      run: |
+        sfdx force:auth:jwt:grant --clientid $HUB_CONSUMER_KEY --jwtkeyfile assets/server.key --username $HUB_SFDC_USER --setdefaultdevhubusername -a DevHub
+        sfdx force:org:create -s -f config/project-scratch-def.json -a $GITHUB_RUN_NUMBER --wait 5
+    
+    - name: 'Remove Server Key'
+      if: always()
+      run: 'rm assets/server.key'
+    
+    - name: 'Push Source'
+      run: 'sfdx force:source:push -u $GITHUB_RUN_NUMBER'
+
+    - name: 'Run Apex tests'
+      run: 'sfdx force:apex:test:run -u $GITHUB_RUN_NUMBER -c -r human -d ~/tests/apex -w 20'
+
+    - name: 'Delete scratch org'
+      if: always()
+      run: 'sfdx force:org:delete -p -u $GITHUB_RUN_NUMBER'
