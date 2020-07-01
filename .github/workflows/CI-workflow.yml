@@ -63,8 +63,19 @@ jobs:
       run: 'sfdx force:source:push -u $GITHUB_RUN_NUMBER'
 
     - name: 'Run Apex tests'
-      run: 'sfdx force:apex:test:run -u $GITHUB_RUN_NUMBER -c -r human -d ~/tests/apex -w 20'
+      run: |
+        mkdir ~/tests
+        mkdir ~/tests/apex
+        sfdx force:apex:test:run -u $GITHUB_RUN_NUMBER -c -r human -d ~/tests/apex -w 20
 
-    - name: 'Delete scratch org'
+    - name: 'Clean Up'
       if: always()
-      run: 'sfdx force:org:delete -p -u $GITHUB_RUN_NUMBER'
+      run: |
+        sfdx force:org:delete -p -u $GITHUB_RUN_NUMBER'
+        rm ~/tests/apex/test-result-7*.txt ~/tests/apex/test-result-7*.json
+        
+    - uses: actions/upload-artifact@v2
+      if: failure()
+      with:
+        name: unit-test-results
+        path: ~/tests/apex/test-result.txt
