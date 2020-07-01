@@ -1,5 +1,5 @@
 public class SampleClass2 {
     public String returnSomeString() {
-        return 'Hello!';
+        return 'Bye';
     }
 }
