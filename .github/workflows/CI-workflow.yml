@@ -27,7 +27,7 @@ jobs:
         rm pmd-bin.zip
 
     - name: 'Run Static Analysis'
-      run: 'pmd-bin-6.23.0/bin/run.sh pmd -d . -R assets/pmd-ruleset.xml -f text -l apex -r static-analysis.txt -cache nonexistingfile.cache'
+      run: 'pmd-bin-6.23.0/bin/run.sh pmd -d . -R assets/pmd-ruleset.xml -f text -l apex -r static-analysis.txt -cache nonexistingfile.cache -failOnViolation false'
 
     - uses: actions/upload-artifact@v2
       if: failure()
